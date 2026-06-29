@@ -1,0 +1,6 @@
+{
+  "name": "CivicLens Global",
+  "description": "Every report moves your state's rank. Worldwide. Citizen-powered global governance index.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

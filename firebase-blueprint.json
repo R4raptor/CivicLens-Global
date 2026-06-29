@@ -1,0 +1,145 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Custom user metrics and authentication sync metadata stored securely.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Secure Firebase Auth User UID."
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Public display name or initials."
+        },
+        "xp": {
+          "type": "integer",
+          "description": "Gamification Citizen XP level."
+        },
+        "verifiedCount": {
+          "type": "integer",
+          "description": "Total verification tasks successfully completed."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of profile creation."
+        }
+      },
+      "required": ["uid", "email", "displayName"]
+    },
+    "Issue": {
+      "title": "Civic Issue Report",
+      "description": "Reported infrastructure damage with geo-coordinates, AI scans, and real-time validations.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique incident ticket identifier."
+        },
+        "title": {
+          "type": "string",
+          "description": "User-supplied or AI-suggested title."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Road", "Sewer", "Water", "Garbage", "Electricity", "Other"],
+          "description": "Classification of the infrastructure incident."
+        },
+        "severity": {
+          "type": "number",
+          "description": "AI-evaluated hazard severity score between 1.0 and 10.0."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Reported", "In Progress", "Resolved"],
+          "description": "Resolution workflow phase status."
+        },
+        "location": {
+          "type": "string",
+          "description": "Human-readable address or street name."
+        },
+        "lat": {
+          "type": "number",
+          "description": "Exact coordinate latitude."
+        },
+        "lng": {
+          "type": "number",
+          "description": "Exact coordinate longitude."
+        },
+        "photo": {
+          "type": "string",
+          "description": "Unsplash or user-uploaded URL photo of the issue."
+        },
+        "resolvedPhoto": {
+          "type": "string",
+          "description": "Photo confirming repair, if resolved."
+        },
+        "upvotes": {
+          "type": "integer",
+          "description": "Citizen agreement upvote counter."
+        },
+        "verified": {
+          "type": "integer",
+          "description": "Unique verifiers consensus level."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Display-friendly creation time stamp."
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of the citizen who submitted the report."
+        },
+        "userEmail": {
+          "type": "string",
+          "description": "Email address of the submitter."
+        },
+        "reporter": {
+          "type": "object",
+          "description": "Reporter avatar and credentials details."
+        },
+        "verifiers": {
+          "type": "array",
+          "description": "List of citizens who verified the incident."
+        },
+        "official": {
+          "type": "object",
+          "description": "Assigned municipal team/department details."
+        },
+        "resolver": {
+          "type": "object",
+          "description": "Repair dispatch team metadata."
+        },
+        "nearby": {
+          "type": "array",
+          "description": "Identified school/hospital nearby boundaries."
+        },
+        "boxes": {
+          "type": "array",
+          "description": "AI object-detection coordinate boxes."
+        },
+        "globalImpact": {
+          "type": "object",
+          "description": "Associated state leaderboard delta values."
+        }
+      },
+      "required": ["id", "title", "category", "severity", "status", "lat", "lng", "userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Stores individual citizen achievements and synced metrics."
+    },
+    "/issues/{issueId}": {
+      "schema": "Issue",
+      "description": "Collection of all public infrastructure incidents reported globally."
+    }
+  }
+}

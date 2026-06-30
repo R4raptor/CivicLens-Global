@@ -117,7 +117,7 @@ async function startServer() {
       };
 
       const visionResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: [imagePart, { text: visionPrompt }],
         config: { responseMimeType: "application/json", responseSchema: visionSchema }
       });
@@ -143,7 +143,7 @@ async function startServer() {
       };
 
       const analyzerResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: [{ text: analyzerPrompt }],
         config: { responseMimeType: "application/json", responseSchema: analyzerSchema }
       });
@@ -168,7 +168,7 @@ async function startServer() {
       };
 
       const dispatcherResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: [{ text: dispatcherPrompt }],
         config: { responseMimeType: "application/json", responseSchema: dispatcherSchema }
       });

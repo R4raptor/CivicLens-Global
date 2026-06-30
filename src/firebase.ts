@@ -6,7 +6,7 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 const firebaseConfig = {
   projectId: "ordinal-gravity-wwjkk",
   appId: "1:613181401002:web:6b525dcd9f6ce0aa83edd3",
-  apiKey: "AIzaSyDclVQq7xO20ZVlXHMIKMiMn49Yx_pppfk",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "ordinal-gravity-wwjkk.firebaseapp.com",
   firestoreDatabaseId: "ai-studio-civiclensglobal-cf05dc80-9e39-4db3-bfa8-d91427e36707",
   storageBucket: "ordinal-gravity-wwjkk.firebasestorage.app",

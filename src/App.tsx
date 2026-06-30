@@ -157,7 +157,15 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * c; // Distance in km
 }
 
-async function reverseGeocode(lat: number, lng: number): Promise<string> {
+export interface LocationData {
+  fullAddress: string;
+  city: string;
+  state: string;
+  country: string;
+  area: string;
+}
+
+async function reverseGeocode(lat: number, lng: number): Promise<LocationData> {
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, {
       headers: {
@@ -167,14 +175,38 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
     if (res.ok) {
       const data = await res.json();
       if (data && data.display_name) {
-        return data.display_name;
+        const address = data.address || {};
+        
+        let city = address.city || address.municipality || address.state_district || address.county || "Unknown City";
+        // Remove " District" or " Urban" from city names if present for cleaner display
+        if (city.endsWith(" District")) city = city.replace(" District", "");
+        if (city.endsWith(" Urban")) city = city.replace(" Urban", "");
+        if (city === "Bengaluru Urban") city = "Bengaluru";
+        
+        let area = address.suburb || address.village || address.neighbourhood || address.town || address.residential || "";
+
+        const state = address.state || "Unknown State";
+        const country = address.country || "Unknown Country";
+        return {
+          fullAddress: data.display_name,
+          city,
+          state,
+          country,
+          area
+        };
       }
     }
   } catch (e) {
     console.warn("Reverse geocoding failed, using fallback coordinate string", e);
   }
   // Fallback to a pretty geocoordinate string if OSM nominatim is blocked or offline
-  return `Location at ${lat.toFixed(6)}°N, ${lng.toFixed(6)}°E`;
+  return {
+    fullAddress: `Location at ${lat.toFixed(6)}°N, ${lng.toFixed(6)}°E`,
+    city: "Unknown City",
+    state: "Unknown State",
+    country: "Unknown Country",
+    area: ""
+  };
 }
 
 function getGridCellCoords(cell: string, baseLat: number = BASE_LAT, baseLng: number = BASE_LNG) {
@@ -188,53 +220,6 @@ function getGridCellCoords(cell: string, baseLat: number = BASE_LAT, baseLng: nu
   return { lat: parseFloat(calculatedLat.toFixed(6)), lng: parseFloat(calculatedLng.toFixed(6)) };
 }
 
-function getGridCellAddress(cell: string, baseLat: number = BASE_LAT, baseLng: number = BASE_LNG): string {
-  const isCloseToBangalore = Math.abs(baseLat - BASE_LAT) < 0.1 && Math.abs(baseLng - BASE_LNG) < 0.1;
-  if (isCloseToBangalore) {
-    const colLetter = cell.charAt(0);
-    const rowNumStr = cell.substring(1);
-    const col = colLetter.charCodeAt(0) - 65; // A=0, B=1...
-    const row = parseInt(rowNumStr, 10) - 1;   // 1=0, 2=1...
-
-    const addresses: { [key: string]: string } = {
-      "A1": "Queens Road, near Cubbon Park Metro, Ward 12, Bengaluru, Karnataka, 560001",
-      "A2": "Kasturba Road, Opp. Kanteerava Stadium, Ward 12, Bengaluru, Karnataka, 560001",
-      "A3": "Mallya Hospital Road, Shantala Nagar, Ward 12, Bengaluru, Karnataka, 560001",
-      "A4": "Vittal Mallya Road, near UB City, Ward 12, Bengaluru, Karnataka, 560001",
-      "A5": "Lavelle Road, 3rd Cross, Ward 12, Bengaluru, Karnataka, 560001",
-      "B1": "Dr. Ambedkar Veedhi, Vidhana Soudha, Ward 12, Bengaluru, Karnataka, 560001",
-      "B2": "St. Mark's Road, near Bowring Club, Ward 12, Bengaluru, Karnataka, 560001",
-      "B3": "St. Mark's Road, near Cathedral High School, Ward 12, Bengaluru, Karnataka, 560001",
-      "B4": "Lavelle Road, near Smoke House Deli, Ward 12, Bengaluru, Karnataka, 560001",
-      "B5": "Walton Road, Shantala Nagar, Ward 12, Bengaluru, Karnataka, 560001",
-      "C1": "Raj Bhavan Road, near General Post Office, Ward 12, Bengaluru, Karnataka, 560001",
-      "C2": "Infantry Road, near Commissioner Office, Ward 12, Bengaluru, Karnataka, 560001",
-      "C3": "MG Road, near Trinity Metro Station, Ward 12, Bengaluru, Karnataka, 560001",
-      "C4": "Residency Road, near Bishop Cotton Boys' School, Ward 12, Bengaluru, Karnataka, 560025",
-      "C5": "Richmond Road, near Sacred Heart Church, Ward 12, Bengaluru, Karnataka, 560025",
-      "D1": "Commercial Street, Tasker Town, Ward 12, Bengaluru, Karnataka, 560001",
-      "D2": "Cubbon Road, near Manipal Centre, Ward 12, Bengaluru, Karnataka, 560001",
-      "D3": "Residency Road, near Mayo Hall, Ward 12, Bengaluru, Karnataka, 560025",
-      "D4": "Richmond Road, near Baldwin Girls' School, Ward 12, Bengaluru, Karnataka, 560025",
-      "D5": "Wood Street, Ashok Nagar, Ward 12, Bengaluru, Karnataka, 560025",
-      "E1": "Dickenson Road, near Ulsoor Lake, Ward 12, Bengaluru, Karnataka, 560042",
-      "E2": "MG Road, near Cauvery Arts & Crafts, Ward 12, Bengaluru, Karnataka, 560001",
-      "E3": "Brigade Road, near Rex Theatre, Ward 12, Bengaluru, Karnataka, 560001",
-      "E4": "Markham Road, Ashok Nagar, Ward 12, Bengaluru, Karnataka, 560025",
-      "E5": "Albert Street, Richmond Town, Ward 12, Bengaluru, Karnataka, 560025",
-      "F1": "Kensington Road, near Ulsoor, Ward 12, Bengaluru, Karnataka, 560042",
-      "F2": "Old Madras Road, near Halasuru, Ward 12, Bengaluru, Karnataka, 560008",
-      "F3": "Murphy Town, near Murphy Market, Ward 12, Bengaluru, Karnataka, 560008",
-      "F4": "Victoria Road, near Shanti Nagar, Ward 12, Bengaluru, Karnataka, 560047",
-      "F5": "Richmond Town, near Baldwin Boys' School, Ward 12, Bengaluru, Karnataka, 560025",
-    };
-
-    return addresses[cell] || `${cell} Sector, Ward 12, Bengaluru, Karnataka, India`;
-  }
-
-  const coords = getGridCellCoords(cell, baseLat, baseLng);
-  return `Sector ${cell} · Near ${coords.lat.toFixed(5)}°N, ${coords.lng.toFixed(5)}°E`;
-}
 
 function getNearestGridCell(lat: number, lng: number, baseLat: number = BASE_LAT, baseLng: number = BASE_LNG): { cell: string; lat: number; lng: number } {
   let minDistance = Infinity;
@@ -302,8 +287,6 @@ function MainApp() {
 
   // Persistence State
   const [dbStates, setDbStates] = useState<any[]>(INITIAL_STATES);
-  const karnatakaData = dbStates.find(s => s.state === "Karnataka");
-  const karnatakaRankVal = karnatakaData?.rank || 849;
   const indiaSpotlightStates = [...dbStates].filter(s => s.country === "India").sort((a,b) => a.rank - b.rank).slice(0, 3);
   const indiaAvgScore = indiaSpotlightStates.length ? (indiaSpotlightStates.reduce((acc, s) => acc + s.score, 0) / indiaSpotlightStates.length).toFixed(1) : "0.0";
   const [issues, setIssues] = useState<any[]>(INITIAL_ISSUES);
@@ -734,12 +717,26 @@ function MainApp() {
   const [formCategory, setFormCategory] = useState("Road");
   const [formDesc, setFormDesc] = useState("A severe pothole with surrounding cracks detected, causing major local delays next to the hospital zone.");
   const [formLocation, setFormLocation] = useState("");
+  const [formCity, setFormCity] = useState("Unknown City");
+  const [formState, setFormState] = useState("Unknown State");
+  const [formCountry, setFormCountry] = useState("Unknown Country");
+  const [formArea, setFormArea] = useState("");
+
+  const displayState = formState !== "Unknown State" ? formState : "Karnataka";
+  const displayStateData = dbStates.find(s => s.state === displayState);
+  const karnatakaRankVal = displayStateData?.rank || 849;
 
   // Fetch initial address on mount for default coordinates
   useEffect(() => {
     if (!formLocation && formLat && formLng) {
-      reverseGeocode(formLat, formLng).then(addr => {
-        if (addr) setFormLocation(addr);
+      reverseGeocode(formLat, formLng).then(locData => {
+        if (locData) {
+          setFormLocation(locData.fullAddress);
+          setFormCity(locData.city);
+          setFormState(locData.state);
+          setFormCountry(locData.country);
+          setFormArea(locData.area);
+        }
       }).catch(console.error);
     }
   }, []);
@@ -755,7 +752,7 @@ function MainApp() {
     description: string;
     severity: number;
     boxes: Array<{ x: number; y: number; w: number; h: number; label: string; conf: number; color: string }>;
-    bengaluruLocation: string;
+    approximateAddress: string;
     latitude: number;
     longitude: number;
   } | null>(null);
@@ -790,8 +787,12 @@ function MainApp() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ imageBase64: imageSource })
     })
-    .then(r => {
+    .then(async r => {
       if (!r.ok) throw new Error("HTTP error " + r.status);
+      const contentType = r.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned non-JSON response");
+      }
       return r.json();
     })
     .catch(err => {
@@ -805,14 +806,14 @@ function MainApp() {
           { x: 22.5, y: 38.0, w: 32.0, h: 28.0, label: "Pothole", conf: 92, color: "#ef4444" },
           { x: 55.0, y: 50.0, w: 22.0, h: 18.0, label: "Road Crack", conf: 76, color: "#f97316" }
         ],
-        bengaluruLocation: "MG Road, Ward 12, Bengaluru, Karnataka, India",
+        approximateAddress: "Central Sector, Simulated Region",
         latitude: BASE_LAT,
         longitude: BASE_LNG
       };
     });
 
     // Request exact high-accuracy user location immediately in parallel with Gemini API
-    let userLocationPromise: Promise<{ lat: number; lng: number; address: string } | null> = Promise.resolve(null);
+    let userLocationPromise: Promise<{ lat: number; lng: number; locationData: LocationData } | null> = Promise.resolve(null);
     if (useGps && navigator.geolocation) {
       setTerminalLogs(prev => [...prev, "📡 [GPS] Synchronising with orbital geocoders..."]);
       userLocationPromise = new Promise((resolve) => {
@@ -823,8 +824,8 @@ function MainApp() {
             setTerminalLogs(prev => [...prev, `📡 [GPS] Real-time high-accuracy lock: ${lat.toFixed(6)}, ${lng.toFixed(6)}`]);
             
             // Geocode coordinates using OpenStreetMap
-            const realAddress = await reverseGeocode(lat, lng);
-            resolve({ lat, lng, address: realAddress });
+            const locationData = await reverseGeocode(lat, lng);
+            resolve({ lat, lng, locationData });
           },
           (err) => {
             console.warn("GPS lookup denied or failed during scan:", err);
@@ -877,19 +878,22 @@ function MainApp() {
 
         let finalLat = apiData.latitude && typeof apiData.latitude === 'number' ? apiData.latitude : parseFloat(apiData.latitude) || (baseLat + (Math.random() - 0.5) * 0.003);
         let finalLng = apiData.longitude && typeof apiData.longitude === 'number' ? apiData.longitude : parseFloat(apiData.longitude) || (baseLng + (Math.random() - 0.5) * 0.003);
-        let finalAddress = apiData.bengaluruLocation || "";
+        let finalAddress = apiData.approximateAddress || "";
+        let finalLocationData: LocationData | null = null;
 
         if (userLoc) {
           finalLat = userLoc.lat;
           finalLng = userLoc.lng;
-          finalAddress = userLoc.address;
+          finalLocationData = userLoc.locationData;
+          finalAddress = userLoc.locationData.fullAddress;
           
           // Dynamically shift the matrix base coordinates to the user's location
           setBaseLat(userLoc.lat);
           setBaseLng(userLoc.lng);
-        } else if (!finalAddress) {
+        } else if (!finalAddress || finalAddress === apiData.approximateAddress) {
           try {
-            finalAddress = await reverseGeocode(finalLat, finalLng);
+            finalLocationData = await reverseGeocode(finalLat, finalLng);
+            finalAddress = finalLocationData.fullAddress;
           } catch (e) {
             finalAddress = `Near ${finalLat.toFixed(5)}°N, ${finalLng.toFixed(5)}°E`;
           }
@@ -902,6 +906,12 @@ function MainApp() {
         setFormCategory(apiData.category || "Road");
         setFormDesc(apiData.description || "No description provided.");
         setFormLocation(finalAddress);
+        if (finalLocationData) {
+          setFormCity(finalLocationData.city);
+          setFormState(finalLocationData.state);
+          setFormCountry(finalLocationData.country);
+          setFormArea(finalLocationData.area);
+        }
         setFormLat(parseFloat(finalLat.toFixed(6)));
         setFormLng(parseFloat(finalLng.toFixed(6)));
         setSelectedGridCell(alignment.cell);
@@ -923,7 +933,7 @@ function MainApp() {
           `▸ [Gemini Multimodal] Fusing spatial coordinates with semantic context...`,
           `▸ [Gemini Multimodal] Reasoning complete: "${apiData.title}" (${apiData.category})`,
           `▸ [Gemini Multimodal] Priority Severity Score: ${apiData.severity} / 10`,
-          `📍 [Geofence] Location mapped: ${userLoc ? finalAddress : apiData.bengaluruLocation}`,
+          `📍 [Geofence] Location mapped: ${userLoc ? finalAddress : apiData.approximateAddress}`,
           `📍 [Geofence] Lat/Lng pinpointed: ${finalLat.toFixed(6)}, ${finalLng.toFixed(6)}`,
           `✅ [Success] Telemetry validated. Opening incident draft...`
         ]);
@@ -1063,6 +1073,10 @@ function MainApp() {
 
     const uniqueId = `CV-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const currentStateObj = dbStates.find(s => s.state === (formState !== "Unknown State" ? formState : "Karnataka")) || dbStates.find(s => s.state === "Karnataka");
+    const currentStateRankVal = currentStateObj?.rank || 849;
+    const resolvedStateName = formState !== "Unknown State" ? formState : "Karnataka";
+
     const newIssue = {
       id: uniqueId,
       title: formTitle,
@@ -1070,6 +1084,10 @@ function MainApp() {
       severity: activeSeverity,
       status: "Reported",
       location: formLocation,
+      city: formCity,
+      state: formState,
+      country: formCountry,
+      area: formArea,
       lat: formLat,
       lng: formLng,
       photo: (uploadedImage && uploadedImage !== "demo_road_pothole") ? uploadedImage : DEMO_POTHOLE_IMAGE_URL,
@@ -1110,7 +1128,7 @@ function MainApp() {
         { name: "Public Sector Hub", type: "school", dist: 180, icon: "🏫", boost: 1.0 }
       ],
       boxes: activeBoxes,
-      globalImpact: { state: "Karnataka", rankBefore: karnatakaRankVal, rankAfter: karnatakaRankVal - 2, scoreDelta: 0.1 }
+      globalImpact: { state: resolvedStateName, rankBefore: currentStateRankVal, rankAfter: currentStateRankVal > 2 ? currentStateRankVal - 2 : 1, scoreDelta: 0.1 }
     };
 
     const path = `issues/${newIssue.id}`;
@@ -1140,7 +1158,7 @@ function MainApp() {
 
     try {
       if (user?.uid) {
-        const stateRef = doc(db, "states", "Karnataka");
+        const stateRef = doc(db, "states", resolvedStateName);
         await updateDoc(stateRef, { score: increment(0.2) });
         
         const userRef = doc(db, "users", user.uid);
@@ -1149,11 +1167,12 @@ function MainApp() {
     } catch(e) {
       console.error("Failed to update impact locally:", e);
     }
+
+    showToast(`🎉 Civic XP +50 Earned! ${resolvedStateName} rank successfully moved up!`);
     
     setSubmittedIssueId(newIssue.id);
     setSelectedIssueId(newIssue.id);
     setCurrentStep(3);
-    showToast("🎉 Civic XP +50 Earned! Karnataka rank successfully moved up!");
   };
 
   // Verify Issue Event
@@ -1301,9 +1320,9 @@ function MainApp() {
       const idLower = (iss.id || '').toLowerCase();
       const titleLower = (iss.title || '').toLowerCase();
       
-      if (officialFilterState && !locLower.includes(officialFilterState.toLowerCase())) return false;
-      if (officialFilterCity && !locLower.includes(officialFilterCity.toLowerCase())) return false;
-      if (officialFilterArea && !locLower.includes(officialFilterArea.toLowerCase())) return false;
+      if (officialFilterState && iss.state !== officialFilterState) return false;
+      if (officialFilterCity && iss.city !== officialFilterCity) return false;
+      if (officialFilterArea && iss.area !== officialFilterArea) return false;
       
       if (officialSearchTerm) {
         const terms = officialSearchTerm.toLowerCase().trim().split(/\s+/);
@@ -1523,7 +1542,7 @@ function MainApp() {
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex items-center gap-2 text-xs bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-300">
             <MapPin className="w-3.5 h-3.5 text-[#1A73E8]" />
-            <span className="font-medium">Bengaluru, India</span>
+            <span className="font-medium">{formCity !== "Unknown City" ? formCity : "Your Location"}, {formCountry !== "Unknown Country" ? formCountry : "India"}</span>
           </div>
 
           {userRole !== 'official' && (
@@ -1631,7 +1650,7 @@ function MainApp() {
                     World's First Citizen-Powered Governance Index
                   </h1>
                   <p className="text-slate-400 text-sm mb-4">
-                    Every report uploads photo proof, calculates geospatial severity via Vertex AI, maps grid sectors, and updates state rankings globally. Karnataka holds <strong className="text-slate-100">#{karnatakaRankVal}</strong>.
+                    Every report uploads photo proof, calculates geospatial severity via Vertex AI, maps grid sectors, and updates state rankings globally. {displayState} holds <strong className="text-slate-100">#{karnatakaRankVal}</strong>.
                   </p>
                   <div className="flex items-center gap-6 text-xs text-slate-400 font-mono">
                     <span>🌍 {dbStates.length} states</span>
@@ -1777,14 +1796,14 @@ function MainApp() {
                     <div className="flex flex-col mb-4">
                       <h3 className="text-xs uppercase font-mono tracking-widest text-slate-400 font-bold mb-2">🇮🇳 India Spotlight</h3>
                       <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 w-fit">
-                        <span className="text-[11px] font-mono text-slate-300">Karnataka Rank: <span className="text-[#1A73E8] font-bold">#{karnatakaRankVal}</span></span>
+                        <span className="text-[11px] font-mono text-slate-300">{displayState} Rank: <span className="text-[#1A73E8] font-bold">#{karnatakaRankVal}</span></span>
                         <div className="w-px h-3 bg-white/20"></div>
                         <span className="text-[11px] font-mono text-slate-300">India Avg Score: <span className="text-emerald-400 font-bold">{indiaAvgScore}</span></span>
                       </div>
                     </div>
                     <div className="space-y-2.5">
                       {indiaSpotlightStates.map((st, i) => (
-                        <div key={i} className={`flex items-center justify-between p-2.5 rounded-lg border ${st.state === 'Karnataka' ? 'bg-[#1A73E8]/10 border-[#1A73E8]/40' : 'bg-white/5 border-transparent'}`}>
+                        <div key={i} className={`flex items-center justify-between p-2.5 rounded-lg border ${st.state === displayState ? 'bg-[#1A73E8]/10 border-[#1A73E8]/40' : 'bg-white/5 border-transparent'}`}>
                           <div className="flex items-center gap-3">
                             <span className="text-xs font-mono font-bold text-slate-400 w-5">#{st.rank}</span>
                             <span className="text-xs font-medium text-white">{st.state}</span>
@@ -1800,7 +1819,7 @@ function MainApp() {
                     </div>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-4 leading-relaxed">
-                    🌟 <strong>Karnataka</strong> moved up this week! Your reports directly push the civic performance scores upward.
+                    🌟 <strong>{displayState}</strong> moved up this week! Your reports directly push the civic performance scores upward.
                   </p>
                 </div>
 
@@ -1906,7 +1925,7 @@ function MainApp() {
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {filteredStates.map((st, idx) => {
-                        const isHighlight = st.state === "Karnataka";
+                        const isHighlight = st.state === displayState;
                         const displayRank = isHighlight ? karnatakaRankVal : st.rank;
                         return (
                           <tr
@@ -1972,7 +1991,7 @@ function MainApp() {
                         {selectedState.state} Civic Overview
                       </h3>
                       <p className="text-xs text-slate-400">
-                        {selectedState.country} • Global Position: #{selectedState.state === 'Karnataka' ? karnatakaRankVal : selectedState.rank}
+                        {selectedState.country} • Global Position: #{selectedState.state === displayState ? karnatakaRankVal : selectedState.rank}
                       </p>
                     </div>
                   </div>
@@ -2098,7 +2117,7 @@ function MainApp() {
                     </thead>
                     <tbody className="divide-y divide-white/5 font-mono">
                       {[
-                        { label: "Global Rank", val1: `#${s1Obj.state === 'Karnataka' ? karnatakaRankVal : s1Obj.rank}`, val2: `#${s2Obj.state === 'Karnataka' ? karnatakaRankVal : s2Obj.rank}`, val3: `#${s3Obj.state === 'Karnataka' ? karnatakaRankVal : s3Obj.rank}`, winner: wRank },
+                        { label: "Global Rank", val1: `#${s1Obj.state === displayState ? karnatakaRankVal : s1Obj.rank}`, val2: `#${s2Obj.state === displayState ? karnatakaRankVal : s2Obj.rank}`, val3: `#${s3Obj.state === displayState ? karnatakaRankVal : s3Obj.rank}`, winner: wRank },
                         { label: "Civic Score", val1: `${s1Obj.score}/100`, val2: `${s2Obj.score}/100`, val3: `${s3Obj.score}/100`, winner: wScore },
                         { label: "Avg Resolution", val1: `${s1Obj.speed} days`, val2: `${s2Obj.speed} days`, val3: `${s3Obj.speed} days`, winner: wSpeed },
                         { label: "Participation Rate", val1: `${s1Obj.participation}%`, val2: `${s2Obj.participation}%`, val3: `${s3Obj.participation}%`, winner: wPart }
@@ -2469,8 +2488,12 @@ function MainApp() {
                                     setSelectedGridCell(alignment.cell);
                                     
                                     // Reverse geocode to get actual street name
-                                    const exactAddr = await reverseGeocode(latitude, longitude);
-                                    setFormLocation(exactAddr);
+                                    const exactLocData = await reverseGeocode(latitude, longitude);
+                                    setFormLocation(exactLocData.fullAddress);
+                                    setFormCity(exactLocData.city);
+                                    setFormState(exactLocData.state);
+                                    setFormCountry(exactLocData.country);
+                                    setFormArea(exactLocData.area);
                                     
                                     showToast(`🛰️ GPS Locked: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
                                   },
@@ -2504,8 +2527,12 @@ function MainApp() {
                           onClick={async () => {
                             showToast("📡 Fetching address for coordinates...");
                             try {
-                              const addr = await reverseGeocode(formLat, formLng);
-                              setFormLocation(addr);
+                              const locData = await reverseGeocode(formLat, formLng);
+                              setFormLocation(locData.fullAddress);
+                              setFormCity(locData.city);
+                              setFormState(locData.state);
+                              setFormCountry(locData.country);
+                              setFormArea(locData.area);
                               showToast("✅ Address updated");
                             } catch (e) {
                               showToast("❌ Failed to fetch address");
@@ -2616,7 +2643,7 @@ function MainApp() {
                       onClick={() => setIsGpsConfirmOpen(true)}
                       className="w-full bg-gradient-to-r from-[#1A73E8] to-[#8B5CF6] hover:brightness-110 text-white font-bold py-3 rounded-xl text-xs uppercase tracking-widest cursor-pointer"
                     >
-                      Submit & Update Karnataka's Rank
+                      Submit & Update Rank
                     </button>
                   </div>
 
@@ -2663,12 +2690,23 @@ function MainApp() {
                                 return (
                                   <div
                                     key={i}
-                                    onClick={() => {
+                                    onClick={async () => {
                                       setSelectedGridCell(cellLabel);
-                                      const exactAddress = getGridCellAddress(cellLabel, baseLat, baseLng);
-                                      setFormLocation(exactAddress);
                                       setFormLat(parseFloat(calculatedLat.toFixed(6)));
                                       setFormLng(parseFloat(calculatedLng.toFixed(6)));
+                                      
+                                      try {
+                                        const locData = await reverseGeocode(calculatedLat, calculatedLng);
+                                        setFormLocation(locData.fullAddress);
+                                        setFormCity(locData.city);
+                                        setFormState(locData.state);
+                                        setFormCountry(locData.country);
+                                        setFormArea(locData.area);
+                                      } catch (e) {
+                                        const coords = getGridCellCoords(cellLabel, baseLat, baseLng);
+                                        setFormLocation(`Sector ${cellLabel} · Near ${coords.lat.toFixed(5)}°N, ${coords.lng.toFixed(5)}°E`);
+                                      }
+                                      
                                       showToast(`📍 Location updated to Grid ${cellLabel}: ${calculatedLat.toFixed(6)}, ${calculatedLng.toFixed(6)}`);
                                     }}
                                     className={`aspect-square rounded flex flex-col items-center justify-center text-[9px] font-mono cursor-pointer transition-all ${
@@ -2721,7 +2759,7 @@ function MainApp() {
                     <div className="bg-[#1A73E8]/5 border border-[#1A73E8]/20 p-4 rounded-2xl space-y-2">
                       <span className="text-[10px] font-mono text-[#1A73E8] font-bold block uppercase">🚀 Global Action Impact</span>
                       <p className="text-[11px] text-slate-300 leading-relaxed">
-                        By submitting this, the state algorithms recalculate. Karnataka's rank of <strong>#{karnatakaRankVal}</strong> will instantly decrement to <strong>#{karnatakaRankVal - 2}</strong> globally.
+                        By submitting this, the state algorithms recalculate. {displayState}'s rank of <strong>#{karnatakaRankVal}</strong> will instantly decrement to <strong>#{karnatakaRankVal > 2 ? karnatakaRankVal - 2 : 1}</strong> globally.
                       </p>
                     </div>
 
@@ -3224,7 +3262,7 @@ function MainApp() {
                                                       resolvedPhoto: resolvePhotoUrl
                                                     });
                                                     // Update states logic
-                                                    const stateName = activeIssue.globalImpact?.state || "Karnataka";
+                                                    const stateName = activeIssue.state || activeIssue.globalImpact?.state || "Karnataka";
                                                     const nowStr = new Date().toISOString();
                                                     const timeToResolveMs = new Date(nowStr).getTime() - new Date(activeIssue.timestamp).getTime();
                                                     const timeToResolveDays = timeToResolveMs / (1000 * 60 * 60 * 24);
@@ -3466,7 +3504,7 @@ function MainApp() {
                   {
                     num: "4", title: "Global Index Analytics Updater", tech: "Vertex Realtime DB", color: "border-green-500/30 text-green-400",
                     desc: "Recalculates global state positioning scores continuously across all 5,247 sectors worldwide.",
-                    log: ["▸ Karnataka Index: +0.1 Score delta applied", "▸ Lagos State: +0.8 Participation factor updated"]
+                    log: [`▸ ${displayState} Index: +0.1 Score delta applied`, "▸ Lagos State: +0.8 Participation factor updated"]
                   }
                 ].map((agent, i) => (
                   <div key={i} className="bg-white/[0.02] border border-white/5 p-4 rounded-xl flex flex-col md:flex-row gap-4 items-start">
@@ -3508,7 +3546,7 @@ function MainApp() {
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-white">Bengaluru Citizen Account</h3>
+                      <h3 className="text-base font-bold text-white">{formCity !== "Unknown City" ? formCity : "Your City"} Citizen Account</h3>
                       <span className="text-[10px] bg-yellow-500/10 text-yellow-400 px-1.5 py-0.5 rounded font-mono font-bold border border-yellow-500/20">
                         LEVEL 2
                       </span>
@@ -3558,7 +3596,7 @@ function MainApp() {
               {/* Citizen Leaderboard */}
               <div className="bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden">
                 <div className="p-4 border-b border-white/5 bg-slate-900">
-                  <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold">Top Karnataka Citizen Reporters</h3>
+                  <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold">Top {displayState} Citizen Reporters</h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs text-slate-300">
@@ -3593,7 +3631,7 @@ function MainApp() {
                               <td className="p-3 font-semibold text-white flex items-center gap-2">
                                 {item.displayName || item.email?.split('@')[0] || "Citizen Hero"} {isMe && " (You)"}
                               </td>
-                              <td className="p-3 text-slate-400">Bengaluru</td>
+                              <td className="p-3 text-slate-400">{formCity !== "Unknown City" ? formCity : "Your City"}</td>
                               <td className="p-3 text-right">{item.verifiedCount || 0}</td>
                               <td className="p-3 text-right text-yellow-400 font-bold">{item.xp || 0}</td>
                             </tr>
@@ -3827,14 +3865,14 @@ function MainApp() {
                     <div className="flex flex-col mb-4">
                       <h3 className="text-xs uppercase font-mono tracking-widest text-slate-400 font-bold mb-2">🇮🇳 India Spotlight</h3>
                       <div className="inline-flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 w-fit">
-                        <span className="text-[11px] font-mono text-slate-300">Karnataka Rank: <span className="text-[#1A73E8] font-bold">#{karnatakaRankVal}</span></span>
+                        <span className="text-[11px] font-mono text-slate-300">{displayState} Rank: <span className="text-[#1A73E8] font-bold">#{karnatakaRankVal}</span></span>
                         <div className="w-px h-3 bg-white/20"></div>
                         <span className="text-[11px] font-mono text-slate-300">India Avg Score: <span className="text-emerald-400 font-bold">{indiaAvgScore}</span></span>
                       </div>
                     </div>
                     <div className="space-y-2.5">
                       {indiaSpotlightStates.map((st, i) => (
-                        <div key={i} className={`flex items-center justify-between p-2.5 rounded-lg border ${st.state === 'Karnataka' ? 'bg-[#1A73E8]/10 border-[#1A73E8]/40' : 'bg-white/5 border-transparent'}`}>
+                        <div key={i} className={`flex items-center justify-between p-2.5 rounded-lg border ${st.state === displayState ? 'bg-[#1A73E8]/10 border-[#1A73E8]/40' : 'bg-white/5 border-transparent'}`}>
                           <div className="flex items-center gap-3">
                             <span className="text-xs font-mono font-bold text-slate-400 w-5">#{st.rank}</span>
                             <span className="text-xs font-medium text-white">{st.state}</span>
@@ -3888,8 +3926,9 @@ function MainApp() {
                        className="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-slate-200"
                      >
                        <option value="">All States</option>
-                       <option value="Karnataka">Karnataka</option>
-                       <option value="Maharashtra">Maharashtra</option>
+                       {Array.from(new Set(issues.filter(i => i.state).map(i => i.state))).map((state, idx) => (
+                         <option key={idx} value={state as string}>{state as string}</option>
+                       ))}
                      </select>
                    </div>
                    <div className="flex-1 space-y-1">
@@ -3900,8 +3939,9 @@ function MainApp() {
                        className="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-slate-200"
                      >
                        <option value="">All Cities</option>
-                       <option value="Bengaluru">Bengaluru</option>
-                       <option value="Mumbai">Mumbai</option>
+                       {Array.from(new Set(issues.filter(i => i.city).map(i => i.city))).map((city, idx) => (
+                         <option key={idx} value={city as string}>{city as string}</option>
+                       ))}
                      </select>
                    </div>
                    <div className="flex-1 space-y-1">
@@ -3912,9 +3952,9 @@ function MainApp() {
                        className="w-full bg-slate-950 border border-white/10 rounded-lg p-2 text-slate-200"
                      >
                        <option value="">All Areas</option>
-                       <option value="Koramangala">Koramangala</option>
-                       <option value="Indiranagar">Indiranagar</option>
-                       <option value="Whitefield">Whitefield</option>
+                       {Array.from(new Set(issues.filter(i => i.area).map(i => i.area))).map((area, idx) => (
+                         <option key={idx} value={area as string}>{area as string}</option>
+                       ))}
                      </select>
                    </div>
                 </div>
@@ -4056,7 +4096,7 @@ function MainApp() {
                                       resolvedPhoto: resolvePhotoUrl
                                     });
                                     // Update states logic
-                                    const stateName = iss.globalImpact?.state || "Karnataka";
+                                    const stateName = iss.state || iss.globalImpact?.state || "Karnataka";
                                     const nowStr = new Date().toISOString();
                                     const timeToResolveMs = new Date(nowStr).getTime() - new Date(iss.timestamp).getTime();
                                     const timeToResolveDays = timeToResolveMs / (1000 * 60 * 60 * 24);
@@ -4413,7 +4453,7 @@ function MainApp() {
 
               <div className="bg-black/30 border border-white/5 rounded-xl p-4 font-mono text-xs text-slate-300 space-y-2">
                 <p className="text-red-400 font-bold">⚠️ Warning: This action is permanent.</p>
-                <p>This will completely remove the report from the public Karnataka Geospatial Issue Registry, including its coordinates, description, and resolution status.</p>
+                <p>This will completely remove the report from the public {displayState} Geospatial Issue Registry, including its coordinates, description, and resolution status.</p>
               </div>
 
               <div className="flex gap-3 pt-2">
